@@ -76,7 +76,7 @@ export default function ClassesPage() {
     setSaving(true);
     
     // The database validates the invitation code and creates the membership atomically.
-    const { error } = await supabase.rpc("join_class_by_code", {
+    const { data: joinedClassId, error } = await supabase.rpc("join_class_by_code", {
       _code: joinCode.trim().toUpperCase(),
     });
 
@@ -89,7 +89,11 @@ export default function ClassesPage() {
         toast.error("Impossible de rejoindre cette classe pour le moment.");
       }
     } else {
-      toast.success("Classe rejointe avec succès !");
+      toast.success(
+        joinedClassId && myMemberships.includes(joinedClassId)
+          ? "Vous êtes déjà membre de cette classe"
+          : "Classe rejointe avec succès !"
+      );
       setJoinCode("");
       setJoinOpen(false);
       await fetchClasses();
