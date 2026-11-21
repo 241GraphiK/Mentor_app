@@ -168,3 +168,66 @@ $$;
 
 REVOKE ALL ON FUNCTION public.join_class_by_code(text) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.join_class_by_code(text) TO authenticated;
+
+-- Expose only non-sensitive profile fields needed by the leaderboard,
+-- class rosters and messaging UI. Email and account-control fields stay private.
+CREATE OR REPLACE VIEW public.public_profiles
+WITH (security_barrier = true)
+AS
+SELECT id, name, role, institution, field, level, avatar_url, xp, gamification_level
+FROM public.profiles;
+
+REVOKE ALL ON public.public_profiles FROM PUBLIC;
+GRANT SELECT ON public.public_profiles TO authenticated;
+
+CREATE POLICY "Admins can view all profiles"
+ON public.profiles
+FOR SELECT
+TO authenticated
+USING (public.has_role(auth.uid(), 'admin'::public.app_role));
+
+-- Teachers can add learners only to classes they own. This replaces direct
+-- client-side INSERT permission on class_members.
+CREATE OR REPLACE FUNCTION public.add_student_to_class(_class_id uuid, _student_id uuid)
+RETURNS void
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  _teacher_id uuid;
+BEGIN
+  IF auth.uid() IS NULL THEN
+    RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
+  END IF;
+
+  SELECT c.teacher_id INTO _teacher_id
+  FROM public.classes c
+  WHERE c.id = _class_id;
+
+  IF _teacher_id IS NULL THEN
+    RAISE EXCEPTION 'Class not found' USING ERRCODE = 'P0002';
+  END IF;
+
+  IF NOT (
+    (_teacher_id = auth.uid() AND public.has_role(auth.uid(), 'teacher'::public.app_role))
+    OR public.has_role(auth.uid(), 'admin'::public.app_role)
+  ) THEN
+    RAISE EXCEPTION 'Not allowed to manage this class' USING ERRCODE = '42501';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM public.profiles p
+    WHERE p.id = _student_id AND p.role = 'student'::public.app_role
+  ) THEN
+    RAISE EXCEPTION 'Student account not found' USING ERRCODE = 'P0002';
+  END IF;
+
+  INSERT INTO public.class_members (class_id, user_id)
+  VALUES (_class_id, _student_id)
+  ON CONFLICT (class_id, user_id) DO NOTHING;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.add_student_to_class(uuid, uuid) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.add_student_to_class(uuid, uuid) TO authenticated;
