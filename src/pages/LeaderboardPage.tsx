@@ -34,7 +34,7 @@ export default function LeaderboardPage() {
 
   const fetchData = async () => {
     const { data } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, name, xp, gamification_level, avatar_url, institution, field, level")
       .order("xp", { ascending: false });
 

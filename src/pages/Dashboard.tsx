@@ -27,7 +27,7 @@ export default function Dashboard() {
 
   const fetchLeaderboard = async () => {
     const { data: topUsers } = await supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("name, xp, avatar_url, gamification_level")
       .order("xp", { ascending: false })
       .limit(10);

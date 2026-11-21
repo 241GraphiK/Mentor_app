@@ -924,9 +924,34 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      public_profiles: {
+        Row: {
+          avatar_url: string | null
+          field: string | null
+          gamification_level: number
+          id: string
+          institution: string | null
+          level: string | null
+          name: string
+          role: Database["public"]["Enums"]["app_role"]
+          xp: number
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      add_student_to_class: {
+        Args: { _class_id: string; _student_id: string }
+        Returns: undefined
+      }
+      join_class_by_code: {
+        Args: { _code: string }
+        Returns: string
+      }
+      is_class_member: {
+        Args: { _class_id: string; _user_id: string }
+        Returns: boolean
+      }
       award_xp: {
         Args: { _amount: number; _reason: string; _user_id: string }
         Returns: undefined

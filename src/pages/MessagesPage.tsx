@@ -443,7 +443,7 @@ function NewConversationDialog({ userId, isOnline, onCreated }: { userId?: strin
     if (!open || !userId) return;
     setLoading(true);
     supabase
-      .from("profiles")
+      .from("public_profiles")
       .select("id, name, role, avatar_url")
       .neq("id", userId)
       .then(({ data }) => {

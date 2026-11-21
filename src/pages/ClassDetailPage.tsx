@@ -22,7 +22,7 @@ import { cn } from "@/lib/utils";
 
 // ─── Types ───
 interface ClassInfo { id: string; name: string; code: string; teacher_id: string; }
-interface Member { id: string; user_id: string; name: string; email: string; joined_at: string; }
+interface Member { id: string; user_id: string; name: string; joined_at: string; }
 interface Module { id: string; title: string; field: string; level: string; }
 interface ClassModule { id: string; module_id: string; title: string; field: string; level: string; }
 interface Event { id: string; title: string; description: string | null; type: string; event_date: string | null; end_date: string | null; link_url: string | null; quiz_id: string | null; color: string | null; location: string | null; is_all_day: boolean | null; reminder_minutes: number | null; }
@@ -40,7 +40,7 @@ export default function ClassDetailPage() {
   // Students
   const [members, setMembers] = useState<Member[]>([]);
   const [studentSearch, setStudentSearch] = useState("");
-  const [allStudents, setAllStudents] = useState<{ id: string; name: string; email: string }[]>([]);
+  const [allStudents, setAllStudents] = useState<{ id: string; name: string }[]>([]);
   const [addStudentOpen, setAddStudentOpen] = useState(false);
   const [addStudentSearch, setAddStudentSearch] = useState("");
 
@@ -85,17 +85,17 @@ export default function ClassDetailPage() {
     if (!data) return;
     const userIds = data.map(m => m.user_id);
     if (userIds.length === 0) { setMembers([]); return; }
-    const { data: profiles } = await supabase.from("profiles").select("id, name, email").in("id", userIds);
+    const { data: profiles } = await supabase.from("public_profiles").select("id, name").in("id", userIds);
     const profileMap = new Map((profiles || []).map(p => [p.id, p]));
     setMembers(data.map(m => {
       const p = profileMap.get(m.user_id);
-      return { id: m.id, user_id: m.user_id, name: p?.name || "", email: p?.email || "", joined_at: m.joined_at };
+      return { id: m.id, user_id: m.user_id, name: p?.name || "", joined_at: m.joined_at };
     }));
   };
 
   // ─── Fetch all students for adding ───
   const fetchAllStudents = async () => {
-    const { data } = await supabase.from("profiles").select("id, name, email").eq("role", "student");
+    const { data } = await supabase.from("public_profiles").select("id, name").eq("role", "student");
     setAllStudents(data || []);
   };
 
@@ -138,7 +138,7 @@ export default function ClassDetailPage() {
     // fetch group member names
     const userIds = [...new Set(gmList.map(m => m.user_id))];
     if (userIds.length > 0) {
-      const { data: profiles } = await supabase.from("profiles").select("id, name").in("id", userIds);
+      const { data: profiles } = await supabase.from("public_profiles").select("id, name").in("id", userIds);
       const pMap = new Map((profiles || []).map(p => [p.id, p.name]));
       setGroupMembers(gmList.map(m => ({ group_id: m.group_id, user_id: m.user_id, name: pMap.get(m.user_id) || "" })));
     } else {
@@ -159,7 +159,7 @@ export default function ClassDetailPage() {
     if (!data) { setMessages([]); return; }
     const senderIds = [...new Set(data.map(m => m.sender_id))];
     const { data: profiles } = senderIds.length > 0
-      ? await supabase.from("profiles").select("id, name").in("id", senderIds)
+      ? await supabase.from("public_profiles").select("id, name").in("id", senderIds)
       : { data: [] };
     const pMap = new Map((profiles || []).map(p => [p.id, p.name]));
     setMessages(data.map(m => ({ ...m, sender_name: pMap.get(m.sender_id) || "Inconnu", description: null })));
@@ -186,7 +186,7 @@ export default function ClassDetailPage() {
   const addStudent = async (studentId: string) => {
     if (!id) return;
     if (members.some(m => m.user_id === studentId)) { toast.error("Déjà inscrit"); return; }
-    const { error } = await supabase.from("class_members").insert({ class_id: id, user_id: studentId });
+    const { error } = await supabase.rpc("add_student_to_class", { _class_id: id, _student_id: studentId });
     if (error) toast.error(error.message); else { toast.success("Étudiant ajouté"); fetchMembers(); }
   };
 
@@ -288,8 +288,8 @@ export default function ClassDetailPage() {
   if (loading) return <AppLayout><div className="flex justify-center py-20"><div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" /></div></AppLayout>;
   if (!classInfo) return <AppLayout><p className="text-center py-20 text-muted-foreground">Classe introuvable</p></AppLayout>;
 
-  const filteredMembers = members.filter(m => m.name.toLowerCase().includes(studentSearch.toLowerCase()) || m.email.toLowerCase().includes(studentSearch.toLowerCase()));
-  const addableStudents = allStudents.filter(s => !members.some(m => m.user_id === s.id) && (s.name.toLowerCase().includes(addStudentSearch.toLowerCase()) || s.email.toLowerCase().includes(addStudentSearch.toLowerCase())));
+  const filteredMembers = members.filter(m => m.name.toLowerCase().includes(studentSearch.toLowerCase()));
+  const addableStudents = allStudents.filter(s => !members.some(m => m.user_id === s.id) && s.name.toLowerCase().includes(addStudentSearch.toLowerCase()));
 
   return (
     <AppLayout>
@@ -324,12 +324,12 @@ export default function ClassDetailPage() {
                   <DialogTrigger asChild><Button size="sm"><Plus className="w-4 h-4 mr-1" />Inscrire</Button></DialogTrigger>
                   <DialogContent>
                     <DialogHeader><DialogTitle>Inscrire un étudiant</DialogTitle></DialogHeader>
-                    <Input placeholder="Rechercher par nom ou email..." value={addStudentSearch} onChange={e => setAddStudentSearch(e.target.value)} />
+                    <Input placeholder="Rechercher par nom..." value={addStudentSearch} onChange={e => setAddStudentSearch(e.target.value)} />
                     <ScrollArea className="max-h-64">
                       <div className="space-y-1">
                         {addableStudents.slice(0, 30).map(s => (
                           <div key={s.id} className="flex items-center justify-between p-2 rounded hover:bg-muted">
-                            <div><p className="text-sm font-medium">{s.name}</p><p className="text-xs text-muted-foreground">{s.email}</p></div>
+                            <div><p className="text-sm font-medium">{s.name}</p></div>
                             <Button size="sm" variant="outline" onClick={() => addStudent(s.id)}>Ajouter</Button>
                           </div>
                         ))}
@@ -349,7 +349,7 @@ export default function ClassDetailPage() {
                     <div key={m.id} className="flex items-center justify-between p-3 hover:bg-muted/50">
                       <div>
                         <p className="font-medium text-sm text-foreground">{m.name}</p>
-                        <p className="text-xs text-muted-foreground">{m.email}</p>
+                        
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">{format(new Date(m.joined_at), "dd MMM yyyy", { locale: fr })}</span>
@@ -563,7 +563,7 @@ export default function ClassDetailPage() {
                                 <div className="space-y-1">
                                   {members.filter(m => !gMembers.some(gm => gm.user_id === m.user_id)).map(m => (
                                     <div key={m.user_id} className="flex items-center justify-between p-2 rounded hover:bg-muted">
-                                      <div><p className="text-sm font-medium">{m.name}</p><p className="text-xs text-muted-foreground">{m.email}</p></div>
+                                      <div><p className="text-sm font-medium">{m.name}</p></div>
                                       <Button size="sm" variant="outline" onClick={() => { addGroupMember(g.id, m.user_id); setAddGroupMemberOpen(null); }}>Ajouter</Button>
                                     </div>
                                   ))}
