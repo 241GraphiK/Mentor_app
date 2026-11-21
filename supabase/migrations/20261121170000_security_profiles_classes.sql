@@ -13,7 +13,8 @@ SECURITY INVOKER
 SET search_path = public, pg_temp
 AS $$
 BEGIN
-  IF auth.uid() = OLD.id
+  IF current_user = 'authenticated'
+     AND auth.uid() = OLD.id
      AND NOT public.has_role(auth.uid(), 'admin'::public.app_role)
      AND (
        NEW.id IS DISTINCT FROM OLD.id
