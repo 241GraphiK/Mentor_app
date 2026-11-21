@@ -75,38 +75,24 @@ export default function ClassesPage() {
     if (!joinCode.trim() || !user) return;
     setSaving(true);
     
-    // Find the class by code
-    const { data: foundClass, error: findError } = await supabase
-      .from("classes")
-      .select("id")
-      .eq("code", joinCode.trim().toUpperCase())
-      .maybeSingle();
-    
-    if (findError || !foundClass) {
-      toast.error("Code invalide ou classe introuvable");
-      setSaving(false);
-      return;
-    }
-    
-    // Check if already a member
-    if (myMemberships.includes(foundClass.id)) {
-      toast.error("Vous êtes déjà membre de cette classe");
-      setSaving(false);
-      return;
-    }
-    
-    // Join the class
-    const { error } = await supabase
-      .from("class_members")
-      .insert({ class_id: foundClass.id, user_id: user.id });
-    
+    // The database validates the invitation code and creates the membership atomically.
+    const { error } = await supabase.rpc("join_class_by_code", {
+      _code: joinCode.trim().toUpperCase(),
+    });
+
     if (error) {
-      toast.error(error.message);
+      if (error.code === "23505") {
+        toast.error("Vous êtes déjà membre de cette classe");
+      } else if (error.code === "P0001" || error.code === "22023") {
+        toast.error("Code invalide ou classe introuvable");
+      } else {
+        toast.error("Impossible de rejoindre cette classe pour le moment.");
+      }
     } else {
       toast.success("Classe rejointe avec succès !");
       setJoinCode("");
       setJoinOpen(false);
-      fetchClasses();
+      await fetchClasses();
     }
     setSaving(false);
   };
