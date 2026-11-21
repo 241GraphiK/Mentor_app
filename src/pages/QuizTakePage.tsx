@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/use-auth";
-import { useGamification } from "@/hooks/use-gamification";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
@@ -15,13 +14,27 @@ interface QuizData {
 }
 interface QuestionData {
   id: string; text: string; explanation: string | null; difficulty: string; points: number; type: string;
-  options: { text: string; isCorrect: boolean }[];
+  options: { text: string }[];
+}
+interface QuizReviewQuestion {
+  questionId: string;
+  text: string;
+  explanation: string | null;
+  points: number;
+  options: { text: string; isCorrect: boolean; selected: boolean }[];
+}
+interface QuizResult {
+  attemptId: string;
+  score: number;
+  maxScore: number;
+  percentage: number;
+  xpAwarded: number;
+  review: QuizReviewQuestion[];
 }
 
 export default function QuizTakePage() {
   const { id } = useParams();
-  const { user } = useAuth();
-  const { awardXp } = useGamification();
+  const { user, refreshProfile } = useAuth();
 
   const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [questions, setQuestions] = useState<QuestionData[]>([]);
@@ -30,7 +43,7 @@ export default function QuizTakePage() {
   const [currentQ, setCurrentQ] = useState(0);
   const [answers, setAnswers] = useState<Record<string, number[]>>({});
   const [showResults, setShowResults] = useState(false);
-  const [xpAwarded, setXpAwarded] = useState(0);
+  const [result, setResult] = useState<QuizResult | null>(null);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -38,13 +51,13 @@ export default function QuizTakePage() {
       if (!id) return;
       const [quizRes, questionsRes] = await Promise.all([
         supabase.from("quizzes").select("*").eq("id", id).maybeSingle(),
-        supabase.from("questions").select("*").eq("quiz_id", id),
+        supabase.from("questions").select("id, text, explanation, difficulty, points, type, options").eq("quiz_id", id),
       ]);
       if (quizRes.data) setQuiz(quizRes.data);
       if (questionsRes.data) {
         setQuestions(questionsRes.data.map(q => ({
           ...q,
-          options: Array.isArray(q.options) ? (q.options as any[]) : [],
+          options: Array.isArray(q.options) ? (q.options as { text: string }[]) : [],
         })));
       }
       setLoading(false);
@@ -64,42 +77,24 @@ export default function QuizTakePage() {
     });
   };
 
-  const calculateScore = () => {
-    let earned = 0, total = 0;
-    questions.forEach(q => {
-      total += q.points;
-      const selected = answers[q.id] || [];
-      const correctIndices = q.options.map((o, i) => o.isCorrect ? i : -1).filter(i => i >= 0);
-      if (JSON.stringify([...selected].sort()) === JSON.stringify([...correctIndices].sort())) earned += q.points;
-    });
-    return { earned, total, percentage: total > 0 ? Math.round((earned / total) * 100) : 0 };
-  };
-
   const handleFinish = async () => {
-    if (!user || !quiz) return;
+    if (!user || !quiz || saving) return;
     setSaving(true);
-    const score = calculateScore();
-
-    // Save attempt
-    await supabase.from("quiz_attempts").insert({
-      quiz_id: quiz.id,
-      user_id: user.id,
-      score: score.earned,
-      max_score: score.total,
-      answers: answers as any,
-    });
-
-    // Award XP based on score
-    const baseXp = 10;
-    const bonusXp = Math.round(score.percentage / 10);
-    const difficultyMultiplier = quiz.difficulty === "hard" ? 2 : quiz.difficulty === "medium" ? 1.5 : 1;
-    const totalXp = Math.round((baseXp + bonusXp) * difficultyMultiplier);
-
-    await awardXp(totalXp, `QCM: ${quiz.title} (${score.percentage}%)`);
-    setXpAwarded(totalXp);
-
-    setSaving(false);
-    setShowResults(true);
+    try {
+      const { data, error } = await supabase.rpc("submit_quiz_attempt", {
+        _quiz_id: quiz.id,
+        _answers: answers,
+      });
+      if (error) throw error;
+      if (!data) throw new Error("Le serveur n'a retourné aucun résultat.");
+      setResult(data as QuizResult);
+      await refreshProfile();
+      setShowResults(true);
+    } catch (err: any) {
+      toast.error(err.message || "Impossible d'enregistrer votre tentative.");
+    } finally {
+      setSaving(false);
+    }
   };
 
   if (loading) {
@@ -154,36 +149,33 @@ export default function QuizTakePage() {
     );
   }
 
-  if (showResults) {
-    const score = calculateScore();
+  if (showResults && result) {
     return (
       <AppLayout>
         <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
           <div className="bg-card rounded-xl border border-border p-8 shadow-soft text-center space-y-4">
-            <div className={cn("w-20 h-20 rounded-full mx-auto flex items-center justify-center", score.percentage >= 70 ? "bg-success/10" : score.percentage >= 50 ? "bg-warning/10" : "bg-destructive/10")}>
-              {score.percentage >= 70 ? <CheckCircle2 className="w-10 h-10 text-success" /> : score.percentage >= 50 ? <AlertCircle className="w-10 h-10 text-warning" /> : <XCircle className="w-10 h-10 text-destructive" />}
+            <div className={cn("w-20 h-20 rounded-full mx-auto flex items-center justify-center", result.percentage >= 70 ? "bg-success/10" : result.percentage >= 50 ? "bg-warning/10" : "bg-destructive/10")}>
+              {result.percentage >= 70 ? <CheckCircle2 className="w-10 h-10 text-success" /> : result.percentage >= 50 ? <AlertCircle className="w-10 h-10 text-warning" /> : <XCircle className="w-10 h-10 text-destructive" />}
             </div>
             <h1 className="text-2xl font-bold text-foreground">Résultats</h1>
-            <p className="text-4xl font-bold text-primary">{score.percentage}%</p>
-            <p className="text-muted-foreground">{score.earned}/{score.total} points</p>
-            <p className={cn("font-medium", score.percentage >= 70 ? "text-success" : score.percentage >= 50 ? "text-warning" : "text-destructive")}>
-              {score.percentage >= 70 ? "Excellent ! 🎉" : score.percentage >= 50 ? "Pas mal, continuez ! 💪" : "Révisez et réessayez ! 📚"}
+            <p className="text-4xl font-bold text-primary">{result.percentage}%</p>
+            <p className="text-muted-foreground">{result.score}/{result.maxScore} points</p>
+            <p className={cn("font-medium", result.percentage >= 70 ? "text-success" : result.percentage >= 50 ? "text-warning" : "text-destructive")}>
+              {result.percentage >= 70 ? "Excellent ! 🎉" : result.percentage >= 50 ? "Pas mal, continuez ! 💪" : "Révisez et réessayez ! 📚"}
             </p>
-            {xpAwarded > 0 && (
+            {result.xpAwarded > 0 && (
               <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-warning/10 border border-warning/20">
                 <Zap className="w-5 h-5 text-warning" />
-                <span className="font-bold text-warning">+{xpAwarded} XP</span>
+                <span className="font-bold text-warning">+{result.xpAwarded} XP</span>
               </div>
             )}
           </div>
 
           <div className="space-y-4">
-            {questions.map((q, i) => {
-              const selected = answers[q.id] || [];
-              const correctIndices = q.options.map((o, idx) => o.isCorrect ? idx : -1).filter(idx => idx >= 0);
-              const isCorrect = JSON.stringify([...selected].sort()) === JSON.stringify([...correctIndices].sort());
+            {result.review.map((q, i) => {
+              const isCorrect = q.options.every(o => o.isCorrect === o.selected);
               return (
-                <div key={q.id} className="bg-card rounded-xl border border-border p-5 shadow-soft">
+                <div key={q.questionId} className="bg-card rounded-xl border border-border p-5 shadow-soft">
                   <div className="flex items-start gap-3 mb-3">
                     {isCorrect ? <CheckCircle2 className="w-5 h-5 text-success shrink-0 mt-0.5" /> : <XCircle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />}
                     <p className="font-medium text-foreground">Q{i + 1}. {q.text}</p>
@@ -193,7 +185,7 @@ export default function QuizTakePage() {
                       <div key={oi} className={cn(
                         "p-2.5 rounded-lg text-sm border",
                         o.isCorrect ? "bg-success/10 border-success/30 text-success" :
-                        selected.includes(oi) ? "bg-destructive/10 border-destructive/30 text-destructive" :
+                        o.selected ? "bg-destructive/10 border-destructive/30 text-destructive" :
                         "border-border text-muted-foreground"
                       )}>
                         {o.text}
@@ -211,7 +203,7 @@ export default function QuizTakePage() {
           </div>
 
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => { setStarted(false); setAnswers({}); setShowResults(false); setCurrentQ(0); setXpAwarded(0); }}>Réessayer</Button>
+            <Button variant="outline" onClick={() => { setStarted(false); setAnswers({}); setShowResults(false); setCurrentQ(0); setResult(null); }}>Réessayer</Button>
             <Link to="/quizzes"><Button>Retour aux QCM</Button></Link>
           </div>
         </div>

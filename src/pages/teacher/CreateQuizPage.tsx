@@ -150,27 +150,27 @@ export default function CreateQuizPage() {
 
     setSaving(true);
     try {
-      const { data: quiz, error: quizError } = await supabase
-        .from("quizzes")
-        .insert({ title: title.trim(), description: description.trim(), module_id: moduleId, difficulty, duration })
-        .select()
-        .single();
-
-      if (quizError) throw quizError;
-
-      const { error: qError } = await supabase
-        .from("questions")
-        .insert(validQuestions.map(q => ({
-          quiz_id: quiz.id,
+      const { data: quizId, error: quizError } = await supabase.rpc("create_quiz_with_questions", {
+        _module_id: moduleId,
+        _title: title.trim(),
+        _description: description.trim(),
+        _difficulty: difficulty,
+        _duration: duration,
+        _questions: validQuestions.map(q => ({
           text: q.text.trim(),
           explanation: q.explanation.trim(),
           difficulty: q.difficulty,
           points: q.points,
-          type: "single",
-          options: q.options.filter(o => o.text.trim()).map(o => ({ text: o.text.trim(), isCorrect: o.isCorrect })),
-        })));
+          type: q.options.filter(o => o.text.trim() && o.isCorrect).length > 1 ? "multiple" : "single",
+          options: q.options.filter(o => o.text.trim()).map(o => ({
+            text: o.text.trim(),
+            isCorrect: o.isCorrect,
+          })),
+        })),
+      });
 
-      if (qError) throw qError;
+      if (quizError) throw quizError;
+      if (!quizId) throw new Error("Le QCM n'a pas pu être créé.");
 
       toast.success("QCM créé avec succès !");
       navigate("/quizzes");
