@@ -182,6 +182,9 @@ BEGIN
       gamification_level = GREATEST(1, ((xp + _xp) / 100) + 1)
   WHERE id = _user_id;
 
+  -- Badge checks are performed only after the trusted server records the attempt.
+  PERFORM public.check_and_award_badges(_user_id);
+
   RETURN jsonb_build_object(
     'attemptId', _attempt_id,
     'score', _earned,
