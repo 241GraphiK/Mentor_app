@@ -952,6 +952,10 @@ export type Database = {
         Args: { _class_id: string; _user_id: string }
         Returns: boolean
       }
+      consume_ai_quiz_generation_quota: {
+        Args: Record<PropertyKey, never>
+        Returns: boolean
+      }
       create_quiz_with_questions: {
         Args: {
           _description: string
