@@ -161,7 +161,7 @@ export default function CreateQuizPage() {
           explanation: q.explanation.trim(),
           difficulty: q.difficulty,
           points: q.points,
-          type: "single",
+          type: q.options.filter(o => o.text.trim() && o.isCorrect).length > 1 ? "multiple" : "single",
           options: q.options.filter(o => o.text.trim()).map(o => ({
             text: o.text.trim(),
             isCorrect: o.isCorrect,
