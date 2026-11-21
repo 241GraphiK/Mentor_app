@@ -70,6 +70,17 @@ BEGIN
     RAISE EXCEPTION 'Quiz not found' USING ERRCODE = 'P0002';
   END IF;
 
+  IF EXISTS (
+    SELECT 1
+    FROM jsonb_object_keys(_answers) AS submitted_key(key)
+    WHERE NOT EXISTS (
+      SELECT 1 FROM public.questions q
+      WHERE q.quiz_id = _quiz_id AND q.id::text = submitted_key.key
+    )
+  ) THEN
+    RAISE EXCEPTION 'Answer payload contains unknown question IDs' USING ERRCODE = '22023';
+  END IF;
+
   SELECT difficulty INTO _difficulty FROM public.quizzes WHERE id = _quiz_id;
 
   FOR _question IN
@@ -292,3 +303,9 @@ $$;
 
 REVOKE ALL ON FUNCTION public.create_quiz_with_questions(uuid, text, text, text, integer, jsonb) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.create_quiz_with_questions(uuid, text, text, text, integer, jsonb) TO authenticated;
+
+-- Prevent alternate direct-write paths from reintroducing answer flags.
+DROP POLICY IF EXISTS "Teachers can insert questions" ON public.questions;
+DROP POLICY IF EXISTS "Teachers can update questions" ON public.questions;
+DROP POLICY IF EXISTS "Teachers can delete questions" ON public.questions;
+REVOKE INSERT, UPDATE, DELETE ON public.questions FROM anon, authenticated;
