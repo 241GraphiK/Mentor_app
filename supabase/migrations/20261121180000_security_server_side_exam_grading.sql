@@ -58,7 +58,6 @@ DECLARE
   _question_review jsonb;
   _xp integer := 0;
   _difficulty text;
-  _existing_id uuid;
   _attempt_id uuid;
 BEGIN
   IF _user_id IS NULL THEN
@@ -69,17 +68,6 @@ BEGIN
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.quizzes q WHERE q.id = _quiz_id) THEN
     RAISE EXCEPTION 'Quiz not found' USING ERRCODE = 'P0002';
-  END IF;
-
-  -- Prevent duplicate submissions for the same learner and quiz.
-  PERFORM pg_advisory_xact_lock(hashtextextended(_user_id::text || ':' || _quiz_id::text, 0));
-  SELECT id INTO _existing_id
-  FROM public.quiz_attempts
-  WHERE user_id = _user_id AND quiz_id = _quiz_id
-  ORDER BY completed_at DESC
-  LIMIT 1;
-  IF _existing_id IS NOT NULL THEN
-    RAISE EXCEPTION 'An attempt has already been submitted for this quiz' USING ERRCODE = '23505';
   END IF;
 
   SELECT difficulty INTO _difficulty FROM public.quizzes WHERE id = _quiz_id;
@@ -135,8 +123,14 @@ BEGIN
     SELECT COALESCE(jsonb_agg(
       jsonb_build_object(
         'text', option_row.value->>'text',
-        'isCorrect', _correct ? (option_row.ordinality - 1)::text,
-        'selected', _selected ? (option_row.ordinality - 1)::text
+        'isCorrect', EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(_correct) AS ci(value)
+          WHERE ci.value = (option_row.ordinality - 1)::text
+        ),
+        'selected', EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(_selected) AS si(value)
+          WHERE si.value = (option_row.ordinality - 1)::text
+        )
       ) ORDER BY option_row.ordinality
     ), '[]'::jsonb)
     INTO _question_review
