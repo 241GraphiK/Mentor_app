@@ -316,3 +316,14 @@ DROP POLICY IF EXISTS "Teachers can insert questions" ON public.questions;
 DROP POLICY IF EXISTS "Teachers can update questions" ON public.questions;
 DROP POLICY IF EXISTS "Teachers can delete questions" ON public.questions;
 REVOKE INSERT, UPDATE, DELETE ON public.questions FROM anon, authenticated;
+
+-- XP and badge history must not be writable through client-side table/RPC calls.
+DROP POLICY IF EXISTS "Users can insert own xp" ON public.xp_transactions;
+DROP POLICY IF EXISTS "System can insert badges" ON public.user_badges;
+REVOKE INSERT, UPDATE, DELETE ON public.xp_transactions FROM anon, authenticated;
+REVOKE INSERT, UPDATE, DELETE ON public.user_badges FROM anon, authenticated;
+
+-- These SECURITY DEFINER helpers are internal-only. The quiz submission RPC
+-- performs the permitted XP update after it has computed the grade itself.
+REVOKE ALL ON FUNCTION public.award_xp(uuid, integer, text) FROM PUBLIC, anon, authenticated;
+REVOKE ALL ON FUNCTION public.check_and_award_badges(uuid) FROM PUBLIC, anon, authenticated;
