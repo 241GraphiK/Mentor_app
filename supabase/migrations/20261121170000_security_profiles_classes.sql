@@ -231,3 +231,20 @@ $$;
 
 REVOKE ALL ON FUNCTION public.add_student_to_class(uuid, uuid) FROM PUBLIC;
 GRANT EXECUTE ON FUNCTION public.add_student_to_class(uuid, uuid) TO authenticated;
+
+DROP POLICY IF EXISTS "Teachers can remove class members" ON public.class_members;
+CREATE POLICY "Teachers can remove class members"
+ON public.class_members
+FOR DELETE
+TO authenticated
+USING (
+  EXISTS (
+    SELECT 1 FROM public.classes c
+    WHERE c.id = class_members.class_id
+      AND c.teacher_id = auth.uid()
+  )
+  AND (
+    public.has_role(auth.uid(), 'teacher'::public.app_role)
+    OR public.has_role(auth.uid(), 'admin'::public.app_role)
+  )
+);
