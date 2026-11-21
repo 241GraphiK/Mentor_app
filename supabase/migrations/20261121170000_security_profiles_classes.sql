@@ -217,10 +217,7 @@ BEGIN
     RAISE EXCEPTION 'Not allowed to manage this class' USING ERRCODE = '42501';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1 FROM public.profiles p
-    WHERE p.id = _student_id AND p.role = 'student'::public.app_role
-  ) THEN
+  IF NOT public.has_role(_student_id, 'student'::public.app_role) THEN
     RAISE EXCEPTION 'Student account not found' USING ERRCODE = 'P0002';
   END IF;
 
