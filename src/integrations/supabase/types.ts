@@ -952,6 +952,21 @@ export type Database = {
         Args: { _class_id: string; _user_id: string }
         Returns: boolean
       }
+      create_quiz_with_questions: {
+        Args: {
+          _description: string
+          _difficulty: string
+          _duration: number
+          _module_id: string
+          _questions: Json
+          _title: string
+        }
+        Returns: string
+      }
+      submit_quiz_attempt: {
+        Args: { _answers: Json; _quiz_id: string }
+        Returns: Json
+      }
       award_xp: {
         Args: { _amount: number; _reason: string; _user_id: string }
         Returns: undefined
