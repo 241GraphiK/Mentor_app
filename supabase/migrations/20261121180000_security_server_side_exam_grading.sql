@@ -63,7 +63,7 @@ BEGIN
   IF _user_id IS NULL THEN
     RAISE EXCEPTION 'Authentication required' USING ERRCODE = '42501';
   END IF;
-  IF jsonb_typeof(_answers) <> 'object' THEN
+  IF _answers IS NULL OR jsonb_typeof(_answers) <> 'object' THEN
     RAISE EXCEPTION 'Invalid answer payload' USING ERRCODE = '22023';
   END IF;
   IF NOT EXISTS (SELECT 1 FROM public.quizzes q WHERE q.id = _quiz_id) THEN
@@ -236,13 +236,17 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'Module not found or not authorized' USING ERRCODE = '42501';
   END IF;
-  IF length(trim(COALESCE(_title, ''))) = 0 OR length(_title) > 160 THEN
+  IF length(trim(COALESCE(_title, ''))) = 0 OR length(_title) > 200 THEN
     RAISE EXCEPTION 'Invalid quiz title' USING ERRCODE = '22023';
   END IF;
   IF _duration < 1 OR _duration > 300 THEN
     RAISE EXCEPTION 'Invalid quiz duration' USING ERRCODE = '22023';
   END IF;
-  IF jsonb_typeof(_questions) <> 'array'
+  IF _difficulty NOT IN ('easy', 'medium', 'hard') THEN
+    RAISE EXCEPTION 'Invalid quiz difficulty' USING ERRCODE = '22023';
+  END IF;
+  IF _questions IS NULL
+     OR jsonb_typeof(_questions) <> 'array'
      OR jsonb_array_length(_questions) < 1
      OR jsonb_array_length(_questions) > 100 THEN
     RAISE EXCEPTION 'Invalid question list' USING ERRCODE = '22023';
@@ -260,6 +264,9 @@ BEGIN
     _type := COALESCE(_item->>'type', 'single');
     IF _type NOT IN ('single', 'multiple') THEN
       RAISE EXCEPTION 'Unsupported question type' USING ERRCODE = '22023';
+    END IF;
+    IF COALESCE(_item->>'difficulty', 'medium') NOT IN ('easy', 'medium', 'hard') THEN
+      RAISE EXCEPTION 'Invalid question difficulty' USING ERRCODE = '22023';
     END IF;
     _points := COALESCE((_item->>'points')::integer, 1);
     IF _points < 1 OR _points > 100 THEN
