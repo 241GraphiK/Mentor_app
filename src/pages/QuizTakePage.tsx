@@ -34,7 +34,7 @@ interface QuizResult {
 
 export default function QuizTakePage() {
   const { id } = useParams();
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
 
   const [quiz, setQuiz] = useState<QuizData | null>(null);
   const [questions, setQuestions] = useState<QuestionData[]>([]);
@@ -88,6 +88,7 @@ export default function QuizTakePage() {
       if (error) throw error;
       if (!data) throw new Error("Le serveur n'a retourné aucun résultat.");
       setResult(data as QuizResult);
+      await refreshProfile();
       setShowResults(true);
     } catch (err: any) {
       toast.error(err.message || "Impossible d'enregistrer votre tentative.");
