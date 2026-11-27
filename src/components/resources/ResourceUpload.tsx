@@ -50,9 +50,8 @@ export default function ResourceUpload({ courseId, onUploaded }: ResourceUploadP
       const path = `${courseId}/${crypto.randomUUID()}.${ext}`;
       const { error: uploadError } = await supabase.storage.from("course-resources").upload(path, file, { contentType: file.type });
       if (uploadError) throw uploadError;
-      const { data: urlData } = supabase.storage.from("course-resources").getPublicUrl(path);
       const { error: insertError } = await supabase.from("resources").insert({
-        course_id: courseId, title: title.trim(), type: ACCEPTED_TYPES[file.type] || "link", url: urlData.publicUrl,
+        course_id: courseId, title: title.trim(), type: ACCEPTED_TYPES[file.type] || "link", url: path,
       });
       if (insertError) throw insertError;
       toast.success("Ressource ajoutée !");

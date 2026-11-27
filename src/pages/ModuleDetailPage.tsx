@@ -24,6 +24,16 @@ interface ResourceData {
   id: string; title: string; type: string; url: string; course_id: string;
 }
 
+async function signResourceUrls(items: ResourceData[]): Promise<ResourceData[]> {
+  return Promise.all(items.map(async item => {
+    if (item.type === "link" || (item.url.startsWith("http://") || item.url.startsWith("https://"))) return item;
+    const { data, error } = await supabase.storage
+      .from("course-resources")
+      .createSignedUrl(item.url, 60 * 60);
+    return { ...item, url: error ? "" : data.signedUrl };
+  }));
+}
+
 const hasHtmlTags = (value: string) => /<\/?[a-z][\s\S]*>/i.test(value);
 
 export default function ModuleDetailPage() {
@@ -66,7 +76,7 @@ export default function ModuleDetailPage() {
         const courseIds = coursesRes.data.map(c => c.id);
         if (courseIds.length > 0) {
           const { data: res } = await supabase.from("resources").select("*").in("course_id", courseIds);
-          if (res) setResources(res);
+          if (res) setResources(await signResourceUrls(res));
         }
       }
 
@@ -130,7 +140,7 @@ export default function ModuleDetailPage() {
     const courseIds = courses.map(c => c.id);
     if (courseIds.length > 0) {
       const { data: res } = await supabase.from("resources").select("*").in("course_id", courseIds);
-      if (res) setResources(res);
+      if (res) setResources(await signResourceUrls(res));
     }
   };
 
