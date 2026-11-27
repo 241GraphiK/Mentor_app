@@ -74,12 +74,8 @@ export function ChatInput({ conversationId, replyTo, onClearReply, onSendMessage
           return;
         }
 
-        const { data: urlData } = supabase.storage
-          .from("message-attachments")
-          .getPublicUrl(path);
-
         attachment = {
-          url: urlData.publicUrl,
+          url: path,
           name: file.name,
           type: file.type,
         };
