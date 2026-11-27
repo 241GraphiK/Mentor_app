@@ -155,9 +155,19 @@ export function useMessages(conversationId: string | null) {
 
       const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
       
-      const enriched = data.map(m => ({
-        ...m,
-        sender: profileMap.get(m.sender_id) || { name: "Inconnu", avatar_url: null },
+      const enriched = await Promise.all(data.map(async m => {
+        let attachmentUrl = m.attachment_url;
+        if (attachmentUrl && !/^https?:\\/\\//i.test(attachmentUrl)) {
+          const { data: signed } = await supabase.storage
+            .from("message-attachments")
+            .createSignedUrl(attachmentUrl, 60 * 60);
+          attachmentUrl = signed?.signedUrl ?? null;
+        }
+        return {
+          ...m,
+          attachment_url: attachmentUrl,
+          sender: profileMap.get(m.sender_id) || { name: "Inconnu", avatar_url: null },
+        };
       }));
       setMessages(enriched);
 
@@ -194,6 +204,12 @@ export function useMessages(conversationId: string | null) {
         },
         async (payload) => {
           const newMsg = payload.new as Message;
+          if (newMsg.attachment_url && !/^https?:\\/\\//i.test(newMsg.attachment_url)) {
+            const { data: signed } = await supabase.storage
+              .from("message-attachments")
+              .createSignedUrl(newMsg.attachment_url, 60 * 60);
+            newMsg.attachment_url = signed?.signedUrl ?? null;
+          }
           const { data: profile } = await supabase
             .from("profiles")
             .select("id, name, avatar_url")
