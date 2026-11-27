@@ -157,7 +157,7 @@ export function useMessages(conversationId: string | null) {
       
       const enriched = await Promise.all(data.map(async m => {
         let attachmentUrl = m.attachment_url;
-        if (attachmentUrl && !/^https?:\\/\\//i.test(attachmentUrl)) {
+        if (attachmentUrl && !(attachmentUrl.startsWith("http://") || attachmentUrl.startsWith("https://"))) {
           const { data: signed } = await supabase.storage
             .from("message-attachments")
             .createSignedUrl(attachmentUrl, 60 * 60);
@@ -204,7 +204,7 @@ export function useMessages(conversationId: string | null) {
         },
         async (payload) => {
           const newMsg = payload.new as Message;
-          if (newMsg.attachment_url && !/^https?:\\/\\//i.test(newMsg.attachment_url)) {
+          if (newMsg.attachment_url && !(newMsg.attachment_url.startsWith("http://") || newMsg.attachment_url.startsWith("https://"))) {
             const { data: signed } = await supabase.storage
               .from("message-attachments")
               .createSignedUrl(newMsg.attachment_url, 60 * 60);
