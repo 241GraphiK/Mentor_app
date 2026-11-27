@@ -26,7 +26,7 @@ interface ResourceData {
 
 async function signResourceUrls(items: ResourceData[]): Promise<ResourceData[]> {
   return Promise.all(items.map(async item => {
-    if (item.type === "link" || /^https?:\\/\\//i.test(item.url)) return item;
+    if (item.type === "link" || (item.url.startsWith("http://") || item.url.startsWith("https://"))) return item;
     const { data, error } = await supabase.storage
       .from("course-resources")
       .createSignedUrl(item.url, 60 * 60);
